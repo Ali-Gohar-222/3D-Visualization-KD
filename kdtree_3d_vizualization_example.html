@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D KD-Tree Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%);
+            overflow: hidden;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.98);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            max-width: 380px;
+            max-height: 92vh;
+            overflow-y: auto;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .info-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .info-panel::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+
+        .info-panel::-webkit-scrollbar-thumb {
+            background: #7c3aed;
+            border-radius: 4px;
+        }
+
+        .collapse-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+            color: white;
+            border: none;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 101;
+            box-shadow: 0 8px 20px rgba(124, 58, 237, 0.4);
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .collapse-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 12px 28px rgba(124, 58, 237, 0.6);
+        }
+
+        .info-panel.collapsed {
+            transform: translateX(calc(100% + 40px));
+        }
+
+        h1 {
+            color: #1e293b;
+            font-size: 26px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: #64748b;
+            font-size: 13px;
+            margin-bottom: 18px;
+            line-height: 1.5;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        button.control-btn {
+            background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s;
+            flex: 1 1 auto;
+            min-width: 100px;
+            box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+        }
+
+        button.control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(124, 58, 237, 0.5);
+        }
+
+        button.control-btn.secondary {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+
+        button.control-btn.secondary:hover {
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
+        }
+
+        .legend {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .legend-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            margin-right: 12px;
+            border: 2px solid #1e293b;
+            flex-shrink: 0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 12px;
+            border-radius: 10px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            color: #1e40af;
+            font-weight: 700;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            padding: 12px;
+            border-radius: 10px;
+            border-left: 4px solid #f59e0b;
+            font-size: 12px;
+            color: #78350f;
+            line-height: 1.6;
+        }
+
+        .info-box strong {
+            color: #92400e;
+        }
+
+        .point-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .point-item {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #e2e8f0;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .point-item:hover {
+            border-color: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);
+        }
+
+        .point-label {
+            font-weight: 700;
+            color: #ef4444;
+            margin-bottom: 4px;
+        }
+
+        .point-coord {
+            color: #64748b;
+            font-size: 11px;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .watermark {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.4);
+            font-size: 12px;
+            font-weight: 600;
+            text-align: center;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading 3D KD-Tree...</div>
+    <div id="container"></div>
+    
+    <button class="collapse-btn" onclick="togglePanel()">◀</button>
+    
+    <div class="info-panel" id="infoPanel">
+        <h1>🌳 3D KD-Tree Visualization</h1>
+        <p class="subtitle">Interactive visualization of binary space partitioning with alternating axis splits</p>
+        
+        <div class="section">
+            <div class="section-title">📊 Dataset Statistics</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Points</div>
+                    <div class="stat-value">8</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Tree Depth</div>
+                    <div class="stat-value">3</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Split Planes</div>
+                    <div class="stat-value">6</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Dimensions</div>
+                    <div class="stat-value">3D</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">📍 Data Points</div>
+            <div class="point-list">
+                <div class="point-item">
+                    <div class="point-label">Point 0</div>
+                    <div class="point-coord">x: 68.92</div>
+                </div>
+                <div class="point-item">
+                    <div class="point-label">Point 1</div>
+                    <div class="point-coord">x: 95.11</div>
+                </div>
+                <div class="point-item">
+                    <div class="point-label">Point 2</div>
+                    <div class="point-coord">x: 68.22</div>
+                </div>
+                <div class="point-item">
+                    <div class="point-label">Point 3</div>
+                    <div class="point-coord">x: 69.18</div>
+                </div>
+                <div class="point-item">
+                    <div class="point-label">Point 4</div>
+                    <div class="point-coord">x: 87.10</div>
+                </div>
+                <div class="point-item">
+                    <div class="point-label">Point 5</div>
+                    <div class="point-coord">x: 70.74</div>
+                </div>
+                <div class="point-item">
+                    <div class="point-label">Point 6</div>
+                    <div class="point-coord">x: 63.68</div>
+                </div>
+                <div class="point-item">
+                    <div class="point-label">Point 7</div>
+                    <div class="point-coord">x: 100.05</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">🎮 View Controls</div>
+            <div class="controls">
+                <button class="control-btn" onclick="togglePlanes()">Toggle Planes</button>
+                <button class="control-btn" onclick="togglePoints()">Toggle Points</button>
+                <button class="control-btn secondary" onclick="resetCamera()">Reset View</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">🔄 Rotation Controls</div>
+            <div class="controls">
+                <button class="control-btn" onclick="toggleRotation()">Auto-Rotate</button>
+                <button class="control-btn secondary" onclick="changeSpeed(-1)">Slower</button>
+                <button class="control-btn secondary" onclick="changeSpeed(1)">Faster</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="info-box">
+                <strong>💡 Tip:</strong> Drag to rotate, scroll to zoom. The transparent planes show how the tree divides 3D space at each split point.
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">🎨 Legend</div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ef4444;"></div>
+                    <span><strong>Red Spheres</strong> - Data points</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgba(59, 130, 246, 0.4);"></div>
+                    <span><strong>Blue Planes</strong> - X-axis splits</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgba(16, 185, 129, 0.4);"></div>
+                    <span><strong>Green Planes</strong> - Y-axis splits</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgba(245, 158, 11, 0.4);"></div>
+                    <span><strong>Orange Planes</strong> - Z-axis splits</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="info-box" style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-left-color: #3b82f6;">
+                <strong>📐 Key Concept:</strong> Each plane divides space recursively. Depth 0 uses x-axis, depth 1 uses y-axis, depth 2 uses z-axis, cycling through dimensions.
+            </div>
+        </div>
+    </div>
+
+    <div class="watermark">
+        KD-Tree 3D Visualization | Drag to Rotate • Scroll to Zoom
+    </div>
+
+    <script>
+        // Dataset
+        const points = [
+            {x: 68.9204, y: 0, z: 0, label: "Point 0", index: 0},
+            {x: 95.1054, y: 0, z: 0, label: "Point 1", index: 1},
+            {x: 68.2161, y: 0, z: 0, label: "Point 2", index: 2},
+            {x: 69.1817, y: 0, z: 0, label: "Point 3", index: 3},
+            {x: 87.0951, y: 0, z: 0, label: "Point 4", index: 4},
+            {x: 70.7398, y: 0, z: 0, label: "Point 5", index: 5},
+            {x: 63.6767, y: 0, z: 0, label: "Point 6", index: 6},
+            {x: 100.0476, y: 0, z: 0, label: "Point 7", index: 7}
+        ];
+
+        // Scene setup
+        let scene, camera, renderer;
+        let pointMeshes = [];
+        let planeMeshes = [];
+        let autoRotate = true;
+        let rotationSpeed = 0.003;
+        let showPlanes = true;
+        let showPoints = true;
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+            scene.fog = new THREE.Fog(0x0f172a, 50, 200);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(50, 40, 60);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({antialias: true, alpha: true});
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 50, 50);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            const pointLight1 = new THREE.PointLight(0x7c3aed, 0.5);
+            pointLight1.position.set(-30, 30, -30);
+            scene.add(pointLight1);
+
+            const pointLight2 = new THREE.PointLight(0x3b82f6, 0.5);
+            pointLight2.position.set(30, 30, 30);
+            scene.add(pointLight2);
+
+            // Grid helper
+            const gridHelper = new THREE.GridHelper(100, 20, 0x64748b, 0x334155);
+            scene.add(gridHelper);
+
+            // Axes helper
+            const axesHelper = new THREE.AxesHelper(45);
+            scene.add(axesHelper);
+
+            // Add labels for axes
+            addAxisLabels();
+
+            // Build KD-tree and visualize
+            buildKDTreeVisualization();
+
+            // Mouse controls
+            addMouseControls();
+
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+
+            // Animation loop
+            animate();
+        }
+
+        function addAxisLabels() {
+            const createTextSprite = (text, color, position) => {
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = 256;
+                canvas.height = 128;
+                context.font = 'Bold 60px Arial';
+                context.fillStyle = color;
+                context.textAlign = 'center';
+                context.fillText(text, 128, 80);
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                const material = new THREE.SpriteMaterial({map: texture});
+                const sprite = new THREE.Sprite(material);
+                sprite.position.copy(position);
+                sprite.scale.set(12, 6, 1);
+                scene.add(sprite);
+            };
+
+            createTextSprite('X', '#ef4444', new THREE.Vector3(50, 0, 0));
+            createTextSprite('Y', '#10b981', new THREE.Vector3(0, 50, 0));
+            createTextSprite('Z', '#f59e0b', new THREE.Vector3(0, 0, 50));
+        }
+
+        function buildKDTreeVisualization() {
+            // Normalize coordinates
+            const minX = Math.min(...points.map(p => p.x));
+            const maxX = Math.max(...points.map(p => p.x));
+            const scale = 80 / (maxX - minX);
+            
+            // Add data points with labels
+            points.forEach(point => {
+                const geometry = new THREE.SphereGeometry(2, 32, 32);
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0xef4444,
+                    emissive: 0x991b1b,
+                    shininess: 100,
+                    transparent: true,
+                    opacity: 0.95
+                });
+                const sphere = new THREE.Mesh(geometry, material);
+                
+                const x = (point.x - minX - (maxX - minX) / 2) * scale;
+                const y = point.y * scale;
+                const z = point.z * scale;
+                
+                sphere.position.set(x, y, z);
+                sphere.castShadow = true;
+                scene.add(sphere);
+                pointMeshes.push(sphere);
+
+                // Add point label
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = 256;
+                canvas.height = 128;
+                context.font = 'Bold 48px Arial';
+                context.fillStyle = '#ffffff';
+                context.textAlign = 'center';
+                context.fillText(point.index.toString(), 128, 70);
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMaterial = new THREE.SpriteMaterial({map: texture});
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.position.set(x, y + 5, z);
+                sprite.scale.set(6, 3, 1);
+                scene.add(sprite);
+                pointMeshes.push(sprite);
+            });
+
+            // Add splitting planes
+            const splits = [
+                {value: 69.1817, axis: 'x', color: 0x3b82f6, opacity: 0.35},
+                {value: 68.2161, axis: 'x', color: 0x3b82f6, opacity: 0.28},
+                {value: 87.0951, axis: 'x', color: 0x3b82f6, opacity: 0.28},
+                {value: 68.9204, axis: 'x', color: 0x3b82f6, opacity: 0.22},
+                {value: 70.7398, axis: 'x', color: 0x3b82f6, opacity: 0.22},
+                {value: 95.1054, axis: 'x', color: 0x3b82f6, opacity: 0.22},
+            ];
+
+            splits.forEach(split => {
+                const pos = (split.value - minX - (maxX - minX) / 2) * scale;
+                
+                const geometry = new THREE.PlaneGeometry(90, 90);
+                const material = new THREE.MeshBasicMaterial({
+                    color: split.color,
+                    transparent: true,
+                    opacity: split.opacity,
+                    side: THREE.DoubleSide
+                });
+                const plane = new THREE.Mesh(geometry, material);
+                
+                plane.rotation.y = Math.PI / 2;
+                plane.position.set(pos, 0, 0);
+                
+                scene.add(plane);
+                planeMeshes.push(plane);
+            });
+        }
+
+        function addMouseControls() {
+            let isDragging = false;
+            let previousMousePosition = {x: 0, y: 0};
+
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                autoRotate = false;
+            });
+
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const deltaX = e.clientX - previousMousePosition.x;
+                    const deltaY = e.clientY - previousMousePosition.y;
+                    
+                    const rotationSpeed = 0.005;
+                    const radius = Math.sqrt(camera.position.x ** 2 + camera.position.z ** 2);
+                    const currentAngle = Math.atan2(camera.position.z, camera.position.x);
+                    
+                    camera.position.x = radius * Math.cos(currentAngle - deltaX * rotationSpeed);
+                    camera.position.z = radius * Math.sin(currentAngle - deltaX * rotationSpeed);
+                    camera.position.y = Math.max(10, Math.min(80, camera.position.y - deltaY * 0.2));
+                    
+                    camera.lookAt(0, 0, 0);
+                }
+                previousMousePosition = {x: e.clientX, y: e.clientY};
+            });
+
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+
+            renderer.domElement.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const delta = e.deltaY * 0.05;
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                camera.position.addScaledVector(direction, -delta);
+                
+                const distance = camera.position.length();
+                if (distance < 30) {
+                    camera.position.normalize().multiplyScalar(30);
+                } else if (distance > 150) {
+                    camera.position.normalize().multiplyScalar(150);
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (autoRotate) {
+                const radius = Math.sqrt(camera.position.x ** 2 + camera.position.z ** 2);
+                const angle = Math.atan2(camera.position.z, camera.position.x);
+                camera.position.x = radius * Math.cos(angle + rotationSpeed);
+                camera.position.z = radius * Math.sin(angle + rotationSpeed);
+                camera.lookAt(0, 0, 0);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function togglePlanes() {
+            showPlanes = !showPlanes;
+            planeMeshes.forEach(plane => plane.visible = showPlanes);
+        }
+
+        function togglePoints() {
+            showPoints = !showPoints;
+            pointMeshes.forEach(point => point.visible = showPoints);
+        }
+
+        function resetCamera() {
+            camera.position.set(50, 40, 60);
+            camera.lookAt(0, 0, 0);
+            autoRotate = true;
+        }
+
+        function toggleRotation() {
+            autoRotate = !autoRotate;
+        }
+
+        function changeSpeed(delta) {
+            rotationSpeed += delta * 0.001;
+            rotationSpeed = Math.max(0.001, Math.min(0.01, rotationSpeed));
+        }
+
+        function togglePanel() {
+            const panel = document.getElementById('infoPanel');
+            const btn = document.querySelector('.collapse-btn');
+            panel.classList.toggle('collapsed');
+            btn.textContent = panel.classList.contains('collapsed') ? '▶' : '◀';
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
